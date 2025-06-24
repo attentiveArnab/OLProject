@@ -2,13 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import "ol/ol.css";
 import Map from "ol/Map";
 import View from "ol/View";
+import { unByKey } from "ol/Observable";
+import Overlay from "ol/Overlay";
+import { getArea, getLength } from "ol/sphere";
+import LineString from "ol/geom/LineString";
+import Polygon from "ol/geom/Polygon";
 import ImageLayer from "ol/layer/Image";
 import ImageStatic from "ol/source/ImageStatic";
 import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
 import Draw from "ol/interaction/Draw";
 import Snap from "ol/interaction/Snap";
-import Polygon from "ol/geom/Polygon";
 
 // Define the allowed geometry types as a constant array with TypeScript const assertion
 const geometryTypes = ["Point", "LineString", "Polygon", "Circle"] as const;
@@ -82,37 +86,84 @@ const OpenLayersMap = () => {
       snapRef.current = null;
     }
 
-    // Create new draw interaction
-    drawRef.current = new Draw({
-      source: vectorSourceRef.current,
-      type: drawType,
-    });
+    let sketch: any;
+    let measureTooltipElement: HTMLDivElement | null;
+    let measureTooltip: Overlay | null;
 
-    // Add listener for drawend event
-    drawRef.current.on("drawend", (event) => {
-      // For polygons, ensure they're closed
-      if (drawType === "Polygon") {
-        const feature = event.feature;
-        const geometry = feature.getGeometry();
-        if (geometry && geometry.getType() === "Polygon") {
-          const polygonGeometry = geometry as Polygon;
-          const coordinates = polygonGeometry.getCoordinates()[0];
-          if (coordinates.length >= 3) {
-            // Ensure the polygon is closed
-            if (
-              coordinates[0][0] !== coordinates[coordinates.length - 1][0] ||
-              coordinates[0][1] !== coordinates[coordinates.length - 1][1]
-            ) {
-              coordinates.push(coordinates[0]);
-              polygonGeometry.setCoordinates([coordinates]);
-            }
-          }
-        }
+    const formatLength = (line: LineString) => {
+      const length = getLength(line);
+      return Math.round(length) + " px";
+    };
+
+    const formatArea = (polygon: Polygon) => {
+      const area = getArea(polygon);
+      return Math.round(area) + " px²";
+    };
+
+    const createMeasureTooltip = () => {
+      if (measureTooltipElement) {
+        measureTooltipElement.remove();
       }
-    });
+      measureTooltipElement = document.createElement("div");
+      measureTooltipElement.className = "ol-tooltip ol-tooltip-measure";
+      measureTooltip = new Overlay({
+        element: measureTooltipElement,
+        offset: [0, -15],
+        positioning: "bottom-center",
+        stopEvent: false,
+        insertFirst: false,
+      });
+      mapRef.current?.addOverlay(measureTooltip);
+    };
 
-    // Add new interactions
-    mapRef.current.addInteraction(drawRef.current);
+    if (drawType === "LineString" || drawType === "Polygon") {
+      drawRef.current = new Draw({
+        source: vectorSourceRef.current,
+        type: drawType,
+      });
+
+      mapRef.current.addInteraction(drawRef.current);
+      createMeasureTooltip();
+
+      let listener: any;
+      drawRef.current.on("drawstart", (evt) => {
+        sketch = evt.feature;
+        let tooltipCoord: any;
+
+        listener = sketch.getGeometry().on("change", (evt: any) => {
+          const geom = evt.target;
+          let output;
+          if (geom instanceof Polygon) {
+            output = formatArea(geom);
+            tooltipCoord = geom.getInteriorPoint().getCoordinates();
+          } else if (geom instanceof LineString) {
+            output = formatLength(geom);
+            tooltipCoord = geom.getLastCoordinate();
+          }
+          if (measureTooltipElement) {
+            measureTooltipElement.innerHTML = output as string;
+          }
+          measureTooltip?.setPosition(tooltipCoord);
+        });
+      });
+
+      drawRef.current.on("drawend", () => {
+        if (measureTooltipElement) {
+          measureTooltipElement.className = "ol-tooltip ol-tooltip-static";
+        }
+        measureTooltip?.setOffset([0, -7]);
+        sketch = null;
+        measureTooltipElement = null;
+        createMeasureTooltip();
+        unByKey(listener);
+      });
+    } else {
+      drawRef.current = new Draw({
+        source: vectorSourceRef.current,
+        type: drawType,
+      });
+      mapRef.current.addInteraction(drawRef.current);
+    }
 
     snapRef.current = new Snap({ source: vectorSourceRef.current });
     mapRef.current.addInteraction(snapRef.current);
