@@ -14,36 +14,26 @@ import VectorSource from "ol/source/Vector";
 import Draw from "ol/interaction/Draw";
 import Snap from "ol/interaction/Snap";
 
-// Define the allowed geometry types as a constant array with TypeScript const assertion
 const geometryTypes = ["Point", "LineString", "Polygon", "Circle"] as const;
 
 const OpenLayersMap = () => {
-  // Ref for the map container div
   const mapDivRef = useRef<HTMLDivElement>(null);
-  // Refs to persist map and vector source instances between renders
   const mapRef = useRef<Map | null>(null);
   const vectorSourceRef = useRef<VectorSource | null>(null);
-  // Add refs for draw and snap interactions
   const drawRef = useRef<Draw | null>(null);
   const snapRef = useRef<Snap | null>(null);
-  // State for the current drawing type
   const [drawType, setDrawType] =
     useState<(typeof geometryTypes)[number]>("Point");
 
-  // Initialize map and persistent layers - runs once on component mount
   useEffect(() => {
-    //image extent is the extent of the image in the map
     const imageExtent = [0, 0, 3000, 2142];
 
-    //create a vector source for use in source of vector layer
     vectorSourceRef.current = new VectorSource();
 
-    //create a vector layer for drawing
     const vectorLayer = new VectorLayer({
       source: vectorSourceRef.current,
     });
 
-    //create a image layer for the image
     const imageLayer = new ImageLayer({
       source: new ImageStatic({
         url: "/FinlayPark.jpg",
@@ -51,10 +41,8 @@ const OpenLayersMap = () => {
       }),
     });
 
-    //create a map
     mapRef.current = new Map({
       target: mapDivRef.current as HTMLDivElement,
-      //pass both old image layer(for the image) and new vector layer (for drawing) to the map
       layers: [imageLayer, vectorLayer],
       view: new View({
         center: [1500, 1071],
@@ -63,20 +51,16 @@ const OpenLayersMap = () => {
       }),
     });
 
-    // Cleanup function to prevent memory leaks
     return () => {
       if (mapRef.current) {
         mapRef.current.setTarget(undefined);
       }
     };
-  }, []); // Empty dependency array means this effect runs once on mount
+  }, []);
 
-  // Handle draw interaction changes when geometry type changes
   useEffect(() => {
-    // Guard clause: ensure map and vector source exist
     if (!mapRef.current || !vectorSourceRef.current) return;
 
-    // Clean up existing interactions using refs
     if (drawRef.current) {
       mapRef.current.removeInteraction(drawRef.current);
       drawRef.current = null;
@@ -167,11 +151,10 @@ const OpenLayersMap = () => {
 
     snapRef.current = new Snap({ source: vectorSourceRef.current });
     mapRef.current.addInteraction(snapRef.current);
-  }, [drawType]); // Run this effect when drawType changes
+  }, [drawType]);
 
   return (
     <div>
-      {/* Controls overlay for geometry type selection */}
       <div
         style={{
           position: "absolute",
@@ -196,7 +179,6 @@ const OpenLayersMap = () => {
           </select>
         </label>
       </div>
-      {/* Map container */}
       <div ref={mapDivRef} className="map"></div>
     </div>
   );
